@@ -1,7 +1,3 @@
-from django.http import Http404
-
-from rest_framework import status
-from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 
@@ -219,6 +215,17 @@ def checkUser(ip, id):
         if response != "":
             response.close()
 
+#Function to add card information on the device.
+def addCardInfo():
+    headers = {
+        'Content-Type': 'application/json'
+    }
+    response = ""
+
+    pass
+
+# time - status - errormessage - device - method - employeeNo
+
 # API to add user template to the devices. (Partial Development Done. create, modify,) (Work on Image uploads.)
 @api_view(['GET', 'DELETE'])
 def addUserTemplate(request):
@@ -226,58 +233,65 @@ def addUserTemplate(request):
     headers = {
         'Content-Type': 'application/json'
     }
+    return_response = {}
+    success = []
+    failed = []
+    notExist = []
     if request.method == "GET":
         for d in data:
-            keys = d.keys() 
-            for key in keys:
-                response = ""
-                if key.isdigit():
-                    ip = d['IP']
-                    temp = d[key].get('UserInfo')
-                    enable = temp['Valid']['enable']
-                    emp = temp['employeeNo']
-                    found = checkUser(ip, emp)
-                    types = 'Modify' if found == 'Exists' else 'Record'
-                    print(f"Get method - {request.method}")
-                    template = json.dumps({
-                        "UserInfo": {
-                            "employeeNo": str(temp['employeeNo']),
-                            "name": str(temp['name']),
-                            "userType": str(temp['userType']).lower(),
-                            "gender": str(temp['gender']).lower(),
-                            "localUIRight": False,
-                            "maxOpenDoorTime": 0,
-                            "Valid": {
-                                "enable": enable,
-                                "beginTime": "2022-10-10T00:00:00",
-                                "endTime": "2037-12-31T23:59:59",
-                                "timeType": "local"
-                            },
-                            "doorRight": "1",
-                            "RightPlan": [
-                                {
-                                    "doorNo": 1,
-                                    "planTemplateNo": "1"
-                                }
-                            ],
-                            "userVerifyMode": "",
-                            "CardInfo": "",
-                            "Photo": ""
-                        }
-                    })
-                    if types == "Record":
-                        url = "http://" + str(ip) + f"/ISAPI/AccessControl/UserInfo/{types}?format=json"
-                        response = requests.post(url, auth=HTTPDigestAuth(cred["user"], cred["password"]), headers=headers, data=template, timeout=1)
-                    else:
-                        url = "http://" + str(ip) + f"/ISAPI/AccessControl/UserInfo/{types}?format=json"
-                        response = requests.put(url, auth=HTTPDigestAuth(cred["user"], cred["password"]), headers=headers, data=template, timeout=1)
+            response = ""
+            ip = d['IP']
+            temp = d['UserInfo']
+            try:
+                enable = False if temp['userType'] == "blackList" else True
+                emp = temp['employeeNo']
+                found = checkUser(ip, emp)
+                types = 'Modify' if found == 'Exists' else 'Record'
+                template = json.dumps({
+                    "UserInfo": {
+                        "employeeNo": str(temp['employeeNo']),
+                        "name": str(temp['name']),
+                        "userType": str(temp['userType']),
+                        "gender": str(temp['gender']).lower(),
+                        "localUIRight": False,
+                        "maxOpenDoorTime": 0,
+                        "Valid": {
+                            "enable": enable,
+                            "beginTime": "2022-10-10T00:00:00",
+                            "endTime": "2037-12-31T23:59:59",
+                            "timeType": "local"
+                        },
+                        "doorRight": "1",
+                        "RightPlan": [
+                            {
+                                "doorNo": 1,
+                                "planTemplateNo": "1"
+                            }
+                        ],
+                        "userVerifyMode": "",
+                        "CardInfo": "",
+                        "Photo": ""
+                    }
+                })
+                if types == "Record":
+                    url = "http://" + str(ip) + f"/ISAPI/AccessControl/UserInfo/{types}?format=json"
+                    response = requests.post(url, auth=HTTPDigestAuth(cred["user"], cred["password"]), headers=headers, data=template, timeout=1)
+                else:
+                    url = "http://" + str(ip) + f"/ISAPI/AccessControl/UserInfo/{types}?format=json"
+                    response = requests.put(url, auth=HTTPDigestAuth(cred["user"], cred["password"]), headers=headers, data=template, timeout=1)
+                success.append(str(temp['employeeNo']))
+                # return_response.append(template)
+                print(response)
+            except Exception as e:
+                failed.append(str(temp['employeeNo']))
+                return Response("Please Enter the following field: {}".format(e))
+            return_response[str(ip)] = {"success": success, "failed": failed, "notExist": notExist}
     if request.method == "DELETE":
-        for d in data:
-            keys = d.keys() 
-            for key in keys:
+        data = request.data
+        response = ""
+        for ip in data["IP"]:
+            for emp in data["EmployeeNoList"]:
                 response = ""
-                ip = d['IP']
-                emp = d['UserInfoDelCond'].get('EmployeeNoList')[0]['employeeNo']
                 found = checkUser(ip, emp)
                 if found == "Exists":
                     template = json.dumps({
@@ -289,9 +303,46 @@ def addUserTemplate(request):
                     }) 
                     url = "http://" + str(ip) + f"/ISAPI/AccessControl/UserInfo/Delete?format=json"
                     response = requests.put(url, auth=HTTPDigestAuth(cred["user"], cred["password"]), headers=headers, data=template, timeout=1)
+                    success.append(str(emp))
                     print(response.text)
                 else:
+                    notExist.append(str(emp))
                     print('Employee Does not exist.')
-                break
+        return_response[str(ip)] = {"success": success, "failed": failed, "notExist": notExist}
         logging.info(f"(addCardInfo) Response -> {response}")
-    return Response("Success")
+    return Response(return_response)
+
+@api_view(['POST'])
+def blockUser(request):
+    data = request.data
+    headers = {
+        'Content-Type': 'application/json'
+    }
+    disabled = []
+    for device in data["devices"]:
+        keys = data["punchcards"].keys()
+        for key in keys:
+            response = ""
+            block = data["punchcards"][key]
+            set_block = "blackList" if block == "Block" else "normal"
+            found = checkUser(device, key)
+            if found == "Exists":
+                template = json.dumps({
+                    "UserInfo": {
+                        "employeeNo": key,
+                        "userType": set_block,
+                        "Valid": {
+                            "enable": True if block == "Block" else False
+                        }
+                    }
+                })
+                url = "http://" + str(device) + f"/ISAPI/AccessControl/UserInfo/Modify?format=json"
+                response = requests.put(url, auth=HTTPDigestAuth(cred["user"], cred["password"]), headers=headers, data=template, timeout=1)
+                print(response)
+                if response.status_code == 200:
+                    disabled.append({key : set_block})
+                else:
+                    print(response.text)
+            else:
+                disabled.append({key : "User not found."})
+    return Response(f"Punchcards disabled: {disabled}")

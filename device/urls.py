@@ -7,8 +7,9 @@ from . import views
 urlpatterns = [
     path('', views.checkOnline, name='user-info-api'),
     path('getusers/', views.getUsers, name='user-online-check-api'),
-    path('getCount/', views.getCount, name='user/cards/face-count-api'),
+    path('getCount/', views.getCount, name='user-face-count'),
     path('addUserTemplate/', views.addUserTemplate, name="add-user-template-to-device"),
+    path('blockUsers/', views.blockUser, name='block-users')
     # path('photoUpload/', views.uploadPhoto, name='upload-user-photo')
 ]
 
